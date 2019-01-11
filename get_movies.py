@@ -11,6 +11,7 @@ Author: wang.gaofei@alibaba-inc.com
 """
 import os, sys, time, datetime, json
 import requests, urlparse, urllib, cookielib
+sys.path.append('/Users/wang.gaofei/git/my_code/')
 from pyquery import PyQuery as pq
 from tools.super_queue import Super_Queue
 from tools.log_config import init_log
