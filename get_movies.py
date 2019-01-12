@@ -115,10 +115,27 @@ class Movies():
 
         html = pq(ret.content)
         movie_div = html('div').filter('.op-zx-new-mvideo-out').eq(0)
+
+        # 查看立即播放按钮
+        first_verify = False
         if movie_div:
             button_text = movie_div('div').filter('.op-zx-new-mvideo-left').eq(0).text()
             if u'立即播放' in button_text:
-                return False
+                first_verify = True
+        else:
+            return True
+
+        # 获取分钟数
+        minute_number = 0
+        if first_verify:
+            info = movie_div('p').filter('.op-zx-new-mvideo-first').text()
+            for node in info.split('|'):
+                if u'分钟' in node:
+                    minute_number = node.split(u'分')[0]
+
+        if minute_number > 30:
+            return False
+
         return True
 
     def get_playing_movies_list(self):
