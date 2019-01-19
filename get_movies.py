@@ -89,7 +89,7 @@ class Movies():
             score = 0
         return float(score)
 
-    def get_movie_down_status(self, keyword, num_retries=3):
+    def get_movie_down_status(self, keyword):
         """
         True 代表还在电影院，False 是已经下映了。
         :param keyword:
@@ -105,37 +105,30 @@ class Movies():
 
         url = u'https://www.baidu.com/baidu?wd=%s&tn=monline_dg&ie=utf-8' % keyword
         ret = ""
-        try:
-            ret = self.session.get(url,headers=headers)
-            ret.encoding = 'utf-8'
-        except Exception as e:
-            print e.message
-            if num_retries > 0:
-                return self.get_movie_down_status(keyword,num_retries-1)
+        for i in range(10):
+            try:
+                ret = requests.get(url,headers=headers)
+                ret.encoding = 'utf-8'
+                break
+            except Exception as e:
+                print e.message
+        if i == 10:
+            return True
 
         html = pq(ret.content)
         movie_div = html('div').filter('.op-zx-new-mvideo-out').eq(0)
 
         # 查看立即播放按钮
-        first_verify = False
         if movie_div:
             button_text = movie_div('div').filter('.op-zx-new-mvideo-left').eq(0).text()
             if u'立即播放' in button_text:
-                first_verify = True
-        else:
-            return True
-
-        # 获取分钟数
-        minute_number = 0
-        if first_verify:
-            info = movie_div('p').filter('.op-zx-new-mvideo-first').text()
-            for node in info.split('|'):
-                if u'分钟' in node:
-                    minute_number = node.split(u'分')[0]
-
-        if minute_number > 30:
-            return False
-
+                # 获取分钟数
+                info = movie_div('p').filter('.op-zx-new-mvideo-first').text()
+                for node in info.split('|'):
+                    if u'分钟' in node:
+                        minute_number = node.split(u'分')[0]
+                        if minute_number > 30:
+                            return False
         return True
 
     def get_playing_movies_list(self):
@@ -220,7 +213,7 @@ class Movies():
         movies = self.db_session.query(MoviesTable).filter(MoviesTable.status == True)
         for movie in movies:
             status = self.get_movie_down_status(movie.name)
-
+            print movie.name, status
             # False 才是下映了
             if not status:
                 log.info("movie《%s》is down" %(movie.name))
@@ -238,7 +231,7 @@ class Movies():
             %(movie.name, str(movie.score), str(movie.hot)))
 
         to = MAIL_ADDRESSEE
-        self.send_mail(title,body,to)
+        self.send_mail_aliyun(title,body,to)
         return title, body
 
     def send_mail(self,title,body,to):
@@ -254,10 +247,47 @@ class Movies():
         message['From'] = username
         message['To'] = ','.join(to)
 
-        smtp = smtplib.SMTP_SSL(smtpserver, 465)
-        smtp.login(username, password)
-        smtp.sendmail(username, to, message.as_string())
-        smtp.quit()
+        for i in range(10):
+                smtp = smtplib.SMTP_SSL(smtpserver, 465)
+                smtp.login(username, password)
+                smtp.sendmail(username, to, message.as_string())
+                smtp.quit()
+                log.info('邮件发送成功')
+                break
+                log.info('邮件发送失败:{}'.format(e.message))
+        return
+
+    def make_chinese(self):
+        import random
+        arr = []
+        for i in range(random.randint(200,500)):
+            arr.append(unichr(random.randint(0x4e00, 0x9fa5)))
+        return ''.join(arr)
+
+
+    def send_mail_aliyun(self,title,body,to):
+        import smtplib
+        from email.mime.text import MIMEText
+
+        smtpserver = 'smtp.aliyun.com'
+        username = MAIL_USERNAME
+        password = MAIL_PASSWORD
+
+        message = MIMEText(body + ' '*500 + self.make_chinese(), 'plain', 'utf-8')
+        message['Subject'] = title
+        message['From'] = username
+        message['To'] = ','.join(to)
+
+        for i in range(10):
+            try:
+                smtp = smtplib.SMTP_SSL(smtpserver, 465)
+                smtp.login(username, password)
+                smtp.sendmail(username, to, message.as_string())
+                smtp.quit()
+                log.info('邮件发送成功')
+                break
+            except Exception as e:
+                log.info('邮件发送失败:{}'.format(e.message))
         return
 
 if __name__ == '__main__':
