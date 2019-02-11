@@ -121,7 +121,7 @@ class Movies():
         # 查看立即播放按钮
         if movie_div:
             button_text = movie_div('div').filter('.op-zx-new-mvideo-left').eq(0).text()
-            if u'立即播放' in button_text:
+            if u'立即播放' in button_text or u'付费观看' in button_text:
                 # 获取分钟数
                 info = movie_div('p').filter('.op-zx-new-mvideo-first').text()
                 for node in info.split('|'):
