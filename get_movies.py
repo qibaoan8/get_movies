@@ -217,14 +217,15 @@ class Movies():
             # False 才是下映了
             if not status:
                 log.info("movie《%s》is down" %(movie.name))
-                self.send_notice(movie)
+                if movie.score > 5 and movie.hot > 5:
+                    self.send_notice(movie)
                 movie.status = status
                 movie.down_time = datetime.datetime.now()
         self.db_session.commit()
         return
 
     def send_notice(self, movie):
-        title = "《%s》下映啦！！" %movie.name
+        title = "《%s》下映,%s分,%s次播放" %(movie.name,movie.score,movie.hot)
         body = (
             "亲爱的，《%s》下映了，劳累了这么久，可以看个电影放松一下啊。"
             "这部电影最高评分达到过%s,曾经在电影院最高三天内播放过%s场，很不错了，祝亲观影愉快。"
