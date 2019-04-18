@@ -95,41 +95,99 @@ class Movies():
         :param keyword:
         :return:
         """
-        headers = {  # 发送HTTP请求时的HEAD信息，用于伪装为浏览器
-            'Connection': 'Keep-Alive',
-            'Accept': 'text/html, application/xhtml+xml, */*',
-            'Accept-Language': 'en-US,en;q=0.8,zh-Hans-CN;q=0.5,zh-Hans;q=0.3',
-            'Accept-Encoding': 'gzip, deflate',
-            'User-Agent': 'Mozilla/6.1 (Windows NT 6.3; WOW64; Trident/7.0; rv:11.0) like Gecko'
-        }
+        def _get_baidu_status(keyword):
+            headers = {  # 发送HTTP请求时的HEAD信息，用于伪装为浏览器
+                'Connection': 'Keep-Alive',
+                'Accept': 'text/html, application/xhtml+xml, */*',
+                'Accept-Language': 'en-US,en;q=0.8,zh-Hans-CN;q=0.5,zh-Hans;q=0.3',
+                'Accept-Encoding': 'gzip, deflate',
+                'User-Agent': 'Mozilla/6.1 (Windows NT 6.3; WOW64; Trident/7.0; rv:11.0) like Gecko'
+            }
 
-        url = u'https://www.baidu.com/baidu?wd=%s&tn=monline_dg&ie=utf-8' % keyword
-        ret = ""
-        for i in range(10):
-            try:
-                ret = requests.get(url,headers=headers)
-                ret.encoding = 'utf-8'
-                break
-            except Exception as e:
-                print e.message
-        if i == 10:
+            url = u'https://www.baidu.com/baidu?wd=%s&tn=monline_dg&ie=utf-8' % keyword
+            ret = ""
+            for i in range(10):
+                try:
+                    ret = requests.get(url,headers=headers)
+                    ret.encoding = 'utf-8'
+                    break
+                except Exception as e:
+                    print e.message
+            if i == 10:
+                return True
+
+            html = pq(ret.content)
+            movie_div = html('div').filter('.op-zx-new-mvideo-out').eq(0)
+
+            # 查看立即播放按钮
+            if movie_div:
+                button_text = movie_div('div').filter('.op-zx-new-mvideo-left').eq(0).text()
+                if u'立即播放' in button_text or u'付费观看' in button_text:
+                    # 获取分钟数
+                    info = movie_div('p').filter('.op-zx-new-mvideo-first').text()
+                    for node in info.split('|'):
+                        if u'分钟' in node:
+                            minute_number = node.split(u'分')[0]
+                            if minute_number > 30:
+                                return False
             return True
 
-        html = pq(ret.content)
-        movie_div = html('div').filter('.op-zx-new-mvideo-out').eq(0)
+        def _get_360so_status(keyword):
+            headers = {  # 发送HTTP请求时的HEAD信息，用于伪装为浏览器
+                'Connection': 'Keep-Alive',
+                'Accept': 'text/html, application/xhtml+xml, */*',
+                'Accept-Language': 'en-US,en;q=0.8,zh-Hans-CN;q=0.5,zh-Hans;q=0.3',
+                'Accept-Encoding': 'gzip, deflate',
+                'User-Agent': 'Mozilla/6.1 (Windows NT 6.3; WOW64; Trident/7.0; rv:11.0) like Gecko'
+            }
 
-        # 查看立即播放按钮
-        if movie_div:
-            button_text = movie_div('div').filter('.op-zx-new-mvideo-left').eq(0).text()
-            if u'立即播放' in button_text or u'付费观看' in button_text:
-                # 获取分钟数
-                info = movie_div('p').filter('.op-zx-new-mvideo-first').text()
-                for node in info.split('|'):
-                    if u'分钟' in node:
-                        minute_number = node.split(u'分')[0]
-                        if minute_number > 30:
-                            return False
-        return True
+            url = u"https://www.so.com/s?ie=utf-8&fr=none&src=360sou_newhome&q=%s" % keyword
+            ret = ""
+            for i in range(10):
+                try:
+                    ret = requests.get(url,headers=headers)
+                    ret.encoding = 'utf-8'
+                    break
+                except Exception as e:
+                    print e.message
+            if i == 10:
+                return True
+            html = pq(ret.content)
+
+
+            # 获取付费观看系列
+            button_div = html('div').filter('.video-weak-link').eq(0)
+            if button_div:
+                if u'付费观看' in button_div('span').text():
+                    return False
+
+            # 获取立即观看系列    「注释掉360的立即播放，太胡了」
+            # video_div = html('p').filter('.video-ext').eq(0)
+            # if video_div:
+            #     div_text = video_div.eq(0).text()
+            #     if u'立即观看' in div_text:
+            #         return False
+            return True
+
+        # 如果下映了，就是False ， 加上not 就是 False
+
+        o_ret = {
+            "source":"",
+            "status":False,
+        }
+
+        if not _get_baidu_status(keyword):
+            o_ret['source'] = "baidu"
+            o_ret['status'] = False
+            return o_ret
+        elif not _get_360so_status(keyword):
+            o_ret['source'] = "360"
+            o_ret['status'] = False
+            return o_ret
+        else:
+            o_ret['source'] = "baidu and 360"
+            o_ret['status'] = True
+            return o_ret
 
     def get_playing_movies_list(self):
         url = "https://www.taopiaopiao.com/showList.htm?n_s=new&city=110100"
@@ -212,14 +270,16 @@ class Movies():
     def update_movie_down_status(self):
         movies = self.db_session.query(MoviesTable).filter(MoviesTable.status == True)
         for movie in movies:
-            status = self.get_movie_down_status(movie.name)
-            print movie.name, status
+            o_status = self.get_movie_down_status(movie.name)
             # False 才是下映了
-            if not status:
+            if not o_status['status']:
                 log.info("movie《%s》is down" %(movie.name))
                 if movie.score > 5 and movie.hot > 5:
+                    print movie.name, "下映了", "消息来自：%s" % o_status['source'], "邮件已发送"
                     self.send_notice(movie)
-                movie.status = status
+                else:
+                    print movie.name, "下映了", "消息来自：%s" % o_status['source'], "邮件没有发送"
+                movie.status = o_status['status']
                 movie.down_time = datetime.datetime.now()
         self.db_session.commit()
         return
