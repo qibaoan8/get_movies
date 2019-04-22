@@ -274,7 +274,7 @@ class Movies():
             # False 才是下映了
             if not o_status['status']:
                 log.info("movie《%s》is down" %(movie.name))
-                if movie.score > 5 and movie.hot > 5:
+                if movie.score > 7 and movie.hot > 5:
                     print movie.name, "下映了", "消息来自：%s" % o_status['source'], "邮件已发送"
                     self.send_notice(movie)
                 else:
