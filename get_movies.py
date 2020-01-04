@@ -99,9 +99,9 @@ class Movies():
             headers = {  # 发送HTTP请求时的HEAD信息，用于伪装为浏览器
                 'Connection': 'Keep-Alive',
                 'Accept': 'text/html, application/xhtml+xml, */*',
-                'Accept-Language': 'en-US,en;q=0.8,zh-Hans-CN;q=0.5,zh-Hans;q=0.3',
+                'Accept-Language': 'zh,en;q=0.9,zh-CN;q=0.8,zh-HK;q=0.7',
                 'Accept-Encoding': 'gzip, deflate',
-                'User-Agent': 'Mozilla/6.1 (Windows NT 6.3; WOW64; Trident/7.0; rv:11.0) like Gecko'
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36'
             }
 
             url = u'https://www.baidu.com/baidu?wd=%s&tn=monline_dg&ie=utf-8' % keyword
@@ -117,14 +117,13 @@ class Movies():
                 return True
 
             html = pq(ret.content)
-            movie_div = html('div').filter('.op-zx-new-mvideo-out').eq(0)
-
+            movie_div = html('div').filter('.c-result-content').eq(0)
             # 查看立即播放按钮
             if movie_div:
-                button_text = movie_div('div').filter('.op-zx-new-mvideo-left').eq(0).text()
+                button_text = movie_div('div').filter('.dis-overflow-none.c-gap-bottom-small').eq(0).text()
                 if u'立即播放' in button_text or u'付费观看' in button_text:
                     # 获取分钟数
-                    info = movie_div('p').filter('.op-zx-new-mvideo-first').text()
+                    info = movie_div('span').filter('.c-gray').text()
                     for node in info.split('|'):
                         if u'分钟' in node:
                             minute_number = node.split(u'分')[0]
@@ -136,9 +135,9 @@ class Movies():
             headers = {  # 发送HTTP请求时的HEAD信息，用于伪装为浏览器
                 'Connection': 'Keep-Alive',
                 'Accept': 'text/html, application/xhtml+xml, */*',
-                'Accept-Language': 'en-US,en;q=0.8,zh-Hans-CN;q=0.5,zh-Hans;q=0.3',
+                'Accept-Language': 'zh,en;q=0.9,zh-CN;q=0.8,zh-HK;q=0.7',
                 'Accept-Encoding': 'gzip, deflate',
-                'User-Agent': 'Mozilla/6.1 (Windows NT 6.3; WOW64; Trident/7.0; rv:11.0) like Gecko'
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36'
             }
 
             url = u"https://www.so.com/s?ie=utf-8&fr=none&src=360sou_newhome&q=%s" % keyword
@@ -155,8 +154,8 @@ class Movies():
             html = pq(ret.content)
 
 
-            # 获取付费观看系列
-            button_div = html('div').filter('.video-weak-link').eq(0)
+            # 获取付费观看系列    「只是掉了，360的付费观看按钮都出不来了，垃圾 2020-01-04 09:47:06」
+            button_div = html('div').filter('.video-section').eq(0)
             if button_div:
                 if u'付费观看' in button_div('span').text():
                     return False
@@ -180,12 +179,12 @@ class Movies():
             o_ret['source'] = "baidu"
             o_ret['status'] = False
             return o_ret
-        elif not _get_360so_status(keyword):
-            o_ret['source'] = "360"
-            o_ret['status'] = False
-            return o_ret
+        # elif not _get_360so_status(keyword):
+        #     o_ret['source'] = "360"
+        #     o_ret['status'] = False
+        #     return o_ret
         else:
-            o_ret['source'] = "baidu and 360"
+            o_ret['source'] = "baidu"
             o_ret['status'] = True
             return o_ret
 
@@ -269,7 +268,14 @@ class Movies():
 
     def update_movie_down_status(self):
         movies = self.db_session.query(MoviesTable).filter(MoviesTable.status == True)
+        movie_sum = 0
+        movie_number = 0
         for movie in movies:
+            movie_sum+=1
+        for movie in movies:
+            movie_number += 1
+            log.info("get movie 《%s》 down status, Completion degree %s/%s" % (
+                                        movie.name, movie_number, movie_sum))
             o_status = self.get_movie_down_status(movie.name)
             # False 才是下映了
             if not o_status['status']:
@@ -281,8 +287,17 @@ class Movies():
                     print movie.name, "下映了", "消息来自：%s" % o_status['source'], "邮件没有发送"
                 movie.status = o_status['status']
                 movie.down_time = datetime.datetime.now()
+            else:
+                log.info("movie《%s》not down" %(movie.name))
         self.db_session.commit()
         return
+
+    def make_chinese(self):
+        import random
+        arr = []
+        for i in range(random.randint(200,500)):
+            arr.append(unichr(random.randint(0x4e00, 0x9fa5)))
+        return ''.join(arr)
 
     def send_notice(self, movie):
         title = "《%s》下映,%s分,%s次播放" %(movie.name,movie.score,movie.hot)
@@ -299,7 +314,7 @@ class Movies():
         import smtplib
         from email.mime.text import MIMEText
 
-        smtpserver = 'smtp.qq.com'
+        smtpserver = 'smtp.aliyun.com'
         username = MAIL_USERNAME
         password = MAIL_PASSWORD
 
@@ -309,28 +324,19 @@ class Movies():
         message['To'] = ','.join(to)
 
         for i in range(10):
-                smtp = smtplib.SMTP_SSL(smtpserver, 465)
-                smtp.login(username, password)
-                smtp.sendmail(username, to, message.as_string())
-                smtp.quit()
-                log.info('邮件发送成功')
-                break
-                log.info('邮件发送失败:{}'.format(e.message))
+            smtp = smtplib.SMTP_SSL(smtpserver, 465)
+            smtp.login(username, password)
+            smtp.sendmail(username, to, message.as_string())
+            smtp.quit()
+            log.info('邮件发送成功')
+            break
         return
-
-    def make_chinese(self):
-        import random
-        arr = []
-        for i in range(random.randint(200,500)):
-            arr.append(unichr(random.randint(0x4e00, 0x9fa5)))
-        return ''.join(arr)
-
 
     def send_mail_aliyun(self,title,body,to):
         import smtplib
         from email.mime.text import MIMEText
 
-        smtpserver = 'smtp.aliyun.com'
+        smtpserver = SMTP_SERVER
         username = MAIL_USERNAME
         password = MAIL_PASSWORD
 
